@@ -11,6 +11,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from datetime import datetime
 import time
+import io
+from fpdf import FPDF
 
 # ============================================================================
 # CONFIG
@@ -28,45 +30,19 @@ st.set_page_config(
 # THEME
 # ============================================================================
 
-def apply_theme(dark_mode: bool = True):
-    if dark_mode:
-        theme_vars = """
-        :root {
-            --bg: #0a0e17;
-            --panel: rgba(15, 23, 42, 0.8);
-            --border: rgba(56, 189, 248, 0.2);
-            --text: #e2e8f0;
-            --muted: #94a3b8;
-            --accent: #38bdf8;
-            --green: #4ade80;
-            --yellow: #facc15;
-            --red: #f87171;
-        }
-        """
-    else:
-        theme_vars = """
-        :root {
-            --bg: #f8fafc;
-            --panel: rgba(255, 255, 255, 0.9);
-            --border: rgba(56, 189, 248, 0.3);
-            --text: #1e293b;
-            --muted: #64748b;
-            --accent: #0284c7;
-            --green: #16a34a;
-            --yellow: #ca8a04;
-            --red: #dc2626;
-        }
-        """
-    
-    st.markdown(f"""
+def apply_theme():
+    st.markdown("""
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap');
 
-    {theme_vars}
-
-    .stApp {{ background: var(--bg); }}
+    :root {
+        --accent: #38bdf8;
+        --green: #4ade80;
+        --yellow: #facc15;
+        --red: #f87171;
+    }
     
-    .layer-header {{
+    .layer-header {
         background: linear-gradient(90deg, rgba(56, 189, 248, 0.15) 0%, transparent 100%);
         border-left: 3px solid var(--accent);
         padding: 0.5rem 0.75rem;
@@ -77,73 +53,71 @@ def apply_theme(dark_mode: bool = True):
         color: var(--accent);
         text-transform: uppercase;
         letter-spacing: 1px;
-    }}
+    }
     
-    .layer-box {{
-        background: var(--panel);
-        border: 1px solid var(--border);
+    .layer-box {
+        border: 1px solid rgba(56, 189, 248, 0.2);
         border-radius: 6px;
         padding: 0.5rem;
         margin-bottom: 0.4rem;
-    }}
+    }
     
-    .layer-box h4 {{
-        color: var(--text);
+    .layer-box h4 {
         font-family: 'Space Grotesk', sans-serif;
         font-size: 0.75rem;
         font-weight: 600;
         margin: 0 0 0.25rem 0;
-    }}
+    }
     
-    .layer-box p {{
-        color: var(--muted);
+    .layer-box p {
         font-size: 0.8rem;
         margin: 0;
-    }}
+        opacity: 0.7;
+    }
     
-    .stat-row {{
+    .stat-row {
         display: flex;
         justify-content: space-between;
         padding: 0.15rem 0;
         border-bottom: 1px solid rgba(56, 189, 248, 0.1);
-    }}
+    }
     
-    .stat-label {{ color: var(--muted); font-size: 0.75rem; }}
-    .stat-value {{ color: var(--text); font-size: 0.75rem; font-weight: 600; }}
+    .stat-label { font-size: 0.75rem; opacity: 0.7; }
+    .stat-value { font-size: 0.75rem; font-weight: 600; }
     
-    .flow-arrow {{
+    .flow-arrow {
         text-align: center;
         color: var(--accent);
         font-size: 1rem;
         margin: 0.25rem 0;
         opacity: 0.6;
-    }}
+    }
     
-    .fts-display {{
+    .fts-display {
         text-align: center;
         padding: 1rem;
         background: linear-gradient(135deg, rgba(56, 189, 248, 0.1) 0%, rgba(74, 222, 128, 0.1) 100%);
-        border: 1px solid var(--border);
+        border: 1px solid rgba(56, 189, 248, 0.2);
         border-radius: 10px;
-    }}
+    }
     
-    .fts-score {{
+    .fts-score {
         font-family: 'IBM Plex Mono', monospace;
         font-size: 3rem;
         font-weight: 700;
         color: var(--accent);
         line-height: 1;
-    }}
+    }
     
-    .fts-label {{
+    .fts-label {
         font-size: 0.7rem;
-        color: var(--muted);
+        opacity: 0.7;
         text-transform: uppercase;
         letter-spacing: 1px;
         margin-top: 0.25rem;
-    }}
+    }
     
-    .chip-pass {{
+    .chip-pass {
         display: inline-block;
         padding: 2px 8px;
         border-radius: 4px;
@@ -152,9 +126,9 @@ def apply_theme(dark_mode: bool = True):
         background: rgba(74, 222, 128, 0.2);
         color: var(--green);
         border: 1px solid var(--green);
-    }}
+    }
     
-    .chip-warn {{
+    .chip-warn {
         display: inline-block;
         padding: 2px 8px;
         border-radius: 4px;
@@ -163,9 +137,9 @@ def apply_theme(dark_mode: bool = True):
         background: rgba(250, 204, 21, 0.2);
         color: var(--yellow);
         border: 1px solid var(--yellow);
-    }}
+    }
     
-    .chip-alert {{
+    .chip-alert {
         display: inline-block;
         padding: 2px 8px;
         border-radius: 4px;
@@ -174,102 +148,93 @@ def apply_theme(dark_mode: bool = True):
         background: rgba(248, 113, 113, 0.2);
         color: var(--red);
         border: 1px solid var(--red);
-    }}
+    }
     
-    .validation-rule {{
-        background: var(--panel);
-        border: 1px solid var(--border);
+    .validation-rule {
+        border: 1px solid rgba(56, 189, 248, 0.2);
         border-radius: 6px;
         padding: 0.5rem 0.75rem;
         margin-bottom: 0.35rem;
-    }}
+    }
     
-    .validation-rule .header {{
+    .validation-rule .header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 0.15rem;
-    }}
+    }
     
-    .validation-rule .name {{
-        color: var(--text);
+    .validation-rule .name {
         font-weight: 600;
         font-size: 0.8rem;
-    }}
+    }
     
-    .validation-rule .weight {{
-        color: var(--muted);
+    .validation-rule .weight {
         font-size: 0.65rem;
-    }}
+        opacity: 0.7;
+    }
     
-    .validation-rule .detail {{
-        color: var(--muted);
+    .validation-rule .detail {
         font-size: 0.7rem;
-    }}
+        opacity: 0.7;
+    }
     
-    .source-card {{
-        background: var(--panel);
-        border: 1px solid var(--border);
+    .source-card {
+        border: 1px solid rgba(56, 189, 248, 0.2);
         border-radius: 6px;
         padding: 0.5rem;
         text-align: center;
-    }}
+    }
     
-    .source-card h5 {{
+    .source-card h5 {
         color: var(--accent);
         font-size: 0.7rem;
         text-transform: uppercase;
         margin: 0 0 0.25rem 0;
-    }}
+    }
     
-    .source-card .count {{
-        color: var(--text);
+    .source-card .count {
         font-size: 1.25rem;
         font-weight: 700;
         font-family: 'IBM Plex Mono', monospace;
-    }}
+    }
     
-    .source-card .label {{
-        color: var(--muted);
+    .source-card .label {
         font-size: 0.65rem;
-    }}
+        opacity: 0.7;
+    }
     
-    section[data-testid="stSidebar"] {{
-        background: rgba(10, 14, 23, 0.95);
-        border-right: 1px solid var(--border);
-    }}
-    
-    .sidebar-title {{
+    .sidebar-title {
         font-family: 'Space Grotesk', sans-serif;
         font-size: 1.25rem;
         font-weight: 700;
         color: var(--accent);
         margin-bottom: 0.25rem;
-    }}
+    }
     
-    .sidebar-subtitle {{
+    .sidebar-subtitle {
         font-size: 0.7rem;
-        color: var(--muted);
+        opacity: 0.7;
         text-transform: uppercase;
         letter-spacing: 1px;
-    }}
+    }
     
-    .stButton > button {{
+    .stButton > button {
         background: linear-gradient(90deg, #38bdf8 0%, #4ade80 100%);
         border: none;
         color: #0a0e17;
         font-weight: 600;
         border-radius: 8px;
         width: 100%;
-    }}
+    }
     
-    .stButton > button:hover {{
+    .stButton > button:hover {
         background: linear-gradient(90deg, #4ade80 0%, #38bdf8 100%);
-    }}
+    }
     
-    .status-idle {{ color: var(--muted); }}
-    .status-running {{ color: var(--yellow); }}
-    .status-complete {{ color: var(--green); }}
+    .status-idle { opacity: 0.7; }
+    .status-running { color: var(--yellow); }
+    .status-complete { color: var(--green); }
     </style>
     """, unsafe_allow_html=True)
 
@@ -552,16 +517,6 @@ def render_sidebar():
     st.sidebar.markdown('<p class="sidebar-subtitle">Protocol Terminal</p>', unsafe_allow_html=True)
     st.sidebar.markdown("---")
     
-    # Theme Toggle - detect change and rerun to apply new CSS
-    previous_mode = st.session_state.get("dark_mode", True)
-    dark_mode = st.sidebar.toggle("🌙 Dark Mode", value=previous_mode)
-    if dark_mode != previous_mode:
-        st.session_state.dark_mode = dark_mode
-        st.rerun()
-    st.session_state.dark_mode = dark_mode
-    
-    st.sidebar.markdown("---")
-    
     # Entity Configuration
     st.sidebar.subheader("Entity Configuration")
     
@@ -615,8 +570,210 @@ def render_sidebar():
         alerts = sum(1 for v in st.session_state.validations if v.status == "ALERT")
         warns = sum(1 for v in st.session_state.validations if v.status == "WARN")
         st.sidebar.write(f"🔴 Alerts: {alerts} | 🟡 Warnings: {warns}")
+        
+        # PDF Export Button
+        st.sidebar.markdown("---")
+        pdf_bytes = generate_pdf_report()
+        st.sidebar.download_button(
+            label="📄 Export PDF Report",
+            data=pdf_bytes,
+            file_name=f"RTFTI_Report_{st.session_state.entity.name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+            mime="application/pdf",
+        )
     else:
         st.sidebar.info("Ready to execute")
+
+
+# ============================================================================
+# PDF REPORT GENERATION
+# ============================================================================
+
+def generate_pdf_report() -> bytes:
+    """Generate a PDF report of the current execution results"""
+    entity = st.session_state.entity
+    trust = st.session_state.trust
+    validations = st.session_state.validations
+    ingestion = st.session_state.ingestion
+    
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    
+    # Title
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_text_color(56, 189, 248)  # Accent blue
+    pdf.cell(0, 15, "RTFTI Protocol Report", ln=True, align="C")
+    
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 8, "Real-Time Financial Trust Infrastructure", ln=True, align="C")
+    pdf.cell(0, 6, f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align="C")
+    pdf.ln(10)
+    
+    # Entity Details Section
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(0, 10, "Entity Details", ln=True)
+    pdf.set_draw_color(56, 189, 248)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(50, 7, "Name:", ln=False)
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, entity.name, ln=True)
+    
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(50, 7, "Sector:", ln=False)
+    pdf.cell(0, 7, entity.sector, ln=True)
+    
+    pdf.cell(50, 7, "Annual Turnover:", ln=False)
+    pdf.cell(0, 7, f"Rs. {entity.turnover_cr} Cr", ln=True)
+    
+    pdf.cell(50, 7, "Employees:", ln=False)
+    pdf.cell(0, 7, str(entity.employees), ln=True)
+    pdf.ln(8)
+    
+    # FTS Score - Big highlight
+    pdf.set_fill_color(240, 249, 255)
+    pdf.rect(10, pdf.get_y(), 190, 35, "F")
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(56, 189, 248)
+    pdf.cell(0, 12, "Financial Trust Score (FTS)", ln=True, align="C")
+    
+    pdf.set_font("Helvetica", "B", 36)
+    if trust.fts >= 80:
+        pdf.set_text_color(74, 222, 128)  # Green
+    elif trust.fts >= 60:
+        pdf.set_text_color(250, 204, 21)  # Yellow
+    else:
+        pdf.set_text_color(248, 113, 113)  # Red
+    pdf.cell(0, 18, f"{trust.fts}/100", ln=True, align="C")
+    
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(0, 6, f"Confidence: {trust.confidence*100:.0f}%", ln=True, align="C")
+    pdf.ln(10)
+    
+    # Ingestion Summary
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(0, 10, "Data Ingestion Summary", ln=True)
+    pdf.set_draw_color(56, 189, 248)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    
+    pdf.set_font("Helvetica", "", 11)
+    pdf.cell(50, 7, "Execution Time:", ln=False)
+    pdf.cell(0, 7, ingestion.timestamp, ln=True)
+    pdf.cell(50, 7, "Total Records:", ln=False)
+    total = ingestion.gl_records + ingestion.bank_records + ingestion.gst_records + ingestion.payroll_records
+    pdf.cell(0, 7, str(total), ln=True)
+    
+    pdf.set_font("Helvetica", "", 10)
+    pdf.cell(47.5, 7, f"GL: {ingestion.gl_records}", border=1, align="C")
+    pdf.cell(47.5, 7, f"Bank: {ingestion.bank_records}", border=1, align="C")
+    pdf.cell(47.5, 7, f"GST: {ingestion.gst_records}", border=1, align="C")
+    pdf.cell(47.5, 7, f"Payroll: {ingestion.payroll_records}", border=1, align="C", ln=True)
+    pdf.ln(8)
+    
+    # Validation Results
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(0, 10, "Validation Results", ln=True)
+    pdf.set_draw_color(56, 189, 248)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    
+    # Table header
+    pdf.set_font("Helvetica", "B", 10)
+    pdf.set_fill_color(56, 189, 248)
+    pdf.set_text_color(255, 255, 255)
+    pdf.cell(55, 8, "Dimension", border=1, fill=True, align="C")
+    pdf.cell(25, 8, "Weight", border=1, fill=True, align="C")
+    pdf.cell(25, 8, "Score", border=1, fill=True, align="C")
+    pdf.cell(25, 8, "Status", border=1, fill=True, align="C")
+    pdf.cell(60, 8, "Details", border=1, fill=True, align="C", ln=True)
+    
+    pdf.set_font("Helvetica", "", 9)
+    pdf.set_text_color(30, 30, 30)
+    
+    for v in validations:
+        # Status color
+        if v.status == "PASS":
+            pdf.set_fill_color(220, 252, 231)
+        elif v.status == "WARN":
+            pdf.set_fill_color(254, 249, 195)
+        else:
+            pdf.set_fill_color(254, 226, 226)
+        
+        pdf.cell(55, 7, v.dimension, border=1)
+        pdf.cell(25, 7, f"{v.weight*100:.0f}%", border=1, align="C")
+        pdf.cell(25, 7, f"{v.score:.0f}", border=1, align="C")
+        pdf.cell(25, 7, v.status, border=1, align="C", fill=True)
+        pdf.cell(60, 7, v.detail[:30] + "..." if len(v.detail) > 30 else v.detail, border=1, ln=True)
+    
+    pdf.ln(8)
+    
+    # Stakeholder Recommendations
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(30, 30, 30)
+    pdf.cell(0, 10, "Stakeholder Recommendations", ln=True)
+    pdf.set_draw_color(56, 189, 248)
+    pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+    pdf.ln(3)
+    
+    # MSME View
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "For MSME:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    rating = "Excellent" if trust.fts >= 80 else "Good" if trust.fts >= 65 else "Needs Improvement"
+    pdf.cell(0, 6, f"  Overall Rating: {rating}", ln=True)
+    
+    alerts_list = [v for v in validations if v.status != "PASS"]
+    if alerts_list:
+        pdf.cell(0, 6, "  Improvement Areas:", ln=True)
+        for v in alerts_list:
+            pdf.cell(0, 5, f"    - {v.dimension}: {v.detail}", ln=True)
+    pdf.ln(3)
+    
+    # Bank View
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "For Bank/NBFC:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    if trust.fts >= 80:
+        pdf.set_text_color(74, 222, 128)
+        pdf.cell(0, 6, "  APPROVED - Fast-track lending, Prime + 1.5%", ln=True)
+    elif trust.fts >= 65:
+        pdf.set_text_color(250, 204, 21)
+        pdf.cell(0, 6, "  CONDITIONAL - Standard process, Prime + 3.5%", ln=True)
+    else:
+        pdf.set_text_color(248, 113, 113)
+        pdf.cell(0, 6, "  REVIEW REQUIRED - Detailed audit needed", ln=True)
+    pdf.set_text_color(30, 30, 30)
+    pdf.ln(3)
+    
+    # Regulator View
+    pdf.set_font("Helvetica", "B", 11)
+    pdf.cell(0, 7, "For Regulator:", ln=True)
+    pdf.set_font("Helvetica", "", 10)
+    if trust.fts >= 70:
+        pdf.cell(0, 6, "  LOW RISK - No systemic concerns", ln=True)
+    elif trust.fts >= 50:
+        pdf.cell(0, 6, "  MEDIUM RISK - Monitor closely", ln=True)
+    else:
+        pdf.cell(0, 6, "  HIGH RISK - Early intervention recommended", ln=True)
+    
+    pdf.ln(10)
+    
+    # Footer
+    pdf.set_font("Helvetica", "I", 8)
+    pdf.set_text_color(150, 150, 150)
+    pdf.cell(0, 5, "RTFTI Protocol v1.0 - This report is auto-generated based on real-time financial data analysis.", ln=True, align="C")
+    pdf.cell(0, 5, "For official use only. Scores are indicative and subject to verification.", ln=True, align="C")
+    
+    # Output to bytes
+    return bytes(pdf.output())
 
 
 # ============================================================================
@@ -1079,12 +1236,8 @@ def render_documentation():
 # ============================================================================
 
 def main():
-    # Initialize dark mode default
-    if "dark_mode" not in st.session_state:
-        st.session_state.dark_mode = True
-    
-    # Apply theme based on session state
-    apply_theme(st.session_state.dark_mode)
+    # Apply custom styles
+    apply_theme()
     
     # Initialize data if needed
     if "gl" not in st.session_state:
